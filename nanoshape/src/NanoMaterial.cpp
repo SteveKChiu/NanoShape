@@ -342,7 +342,11 @@ void NanoMaterial::setInfo(const NanoMaterial::UniformBuffer& info)
 
 void NanoMaterial::setTexture(QSGTexture* texture, bool owned)
 {
-    if (m_texture == texture) return;
+    if (m_texture == texture) {
+        m_textureOwned = owned;
+        return;
+    }
+
     if (m_textureOwned) delete m_texture;
     m_texture = texture;
     m_textureOwned = owned;

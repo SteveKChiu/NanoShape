@@ -241,6 +241,7 @@ NanoShape::NanoShape(QQuickItem* parent)
     , m_painter(this)
 {
     setFlag(ItemHasContents);
+    setAntialiasing(true);
 }
 
 NanoShape::~NanoShape()
@@ -257,8 +258,7 @@ void NanoShape::markDirty()
 void NanoShape::geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry)
 {
     QQuickItem::geometryChange(newGeometry, oldGeometry);
-    if (newGeometry.size() == oldGeometry.size()) return;
-    markDirty();
+    if (newGeometry.size() != oldGeometry.size()) markDirty();
 }
 
 void NanoShape::itemChange(QQuickItem::ItemChange change, const QQuickItem::ItemChangeData& data)
@@ -293,7 +293,7 @@ void NanoShape::prepare()
 
 QSGNode* NanoShape::updatePaintNode(QSGNode* node, QQuickItem::UpdatePaintNodeData*)
 {
-    if (!m_dirty && node) return node;
+    if (node && !m_dirty) return node;
     m_dirty = false;
     return m_painter.updatePaintNode(node);
 }

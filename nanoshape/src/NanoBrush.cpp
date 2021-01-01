@@ -107,7 +107,7 @@ NanoBrush NanoBrush::dashPattern(const QColor& color, const QVector<qreal>& patt
 
     auto pattern = patternRef;
     if (pattern.count() & 1) {
-        pattern += patternRef.last();
+        pattern += patternRef;
     }
 
     int x = 0;

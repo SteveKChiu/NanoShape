@@ -221,7 +221,7 @@ void NanoShapePainter::addPolygon(const QVariant& v)
             poly += item.toPointF();
         }
     }
-    NanoPainter::addPath(poly);
+    NanoPainter::addPolygon(poly);
 }
 
 void NanoShapePainter::stroke()

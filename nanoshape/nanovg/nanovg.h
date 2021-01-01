@@ -383,8 +383,8 @@ int nvgCreateImageMem(NVGcontext* ctx, int imageFlags, unsigned char* data, int 
 int nvgCreateImageRGBA(NVGcontext* ctx, int w, int h, int imageFlags, const unsigned char* data);
 
 // Creates image from specified dash pattern. The value at even position is the stroke length,
-// the value at odd position is the gap length. If npattern is odd number, the gap will be padded
-// with last value.
+// the value at odd position is the gap length. If npattern is odd number, then the list of
+// values is repeated to yield an even number of values.
 // Returns handle to the image.
 int nvgCreateImageDashPattern(NVGcontext* ctx, const int* pattern, int npattern);
 

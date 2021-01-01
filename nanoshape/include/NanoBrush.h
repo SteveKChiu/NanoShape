@@ -47,12 +47,16 @@ public:
 
     /// Creates and returns an image pattern.
     /// Parameters sourceRect specify the region of the image pattern,
-    /// rotation (in degree) around the top-left corner
+    /// rotation (in degree) around the top-left corner.
     static NanoBrush imagePattern(const QImage& image, const QRectF& sourceRect = {},
             qreal rotation = 0, qreal opacity = 1);
 
-    /// pattern and offset will be multiple with unitWidth
-    /// if unitWidth < 0, then it would be scaled with stroke width
+    /// Create and return a dash pattern.
+    /// The value at even position is the stroke length,
+    /// the value at odd position is the gap length. If npattern is odd number, then the list of
+    /// values is repeated to yield an even number of values.
+    /// Pattern and offset will be multiple with unitWidth.
+    /// If unitWidth < 0, then it would be scaled with stroke width.
     static NanoBrush dashPattern(const QColor& color, const QVector<qreal>& pattern, qreal offset = 0, qreal unitWidth = -1);
 
     bool operator==(const NanoBrush& that) const;

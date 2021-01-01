@@ -850,15 +850,18 @@ int nvgCreateImageDashPattern(NVGcontext* ctx, const int* pattern, int npattern)
 {
 	unsigned char* data;
 	unsigned char* p;
-	int i, j, n, w, image;
+	int i, j, n, w, run, image;
 
 	w = 0;
+	n = npattern;
+		
 	for (i = 0; i < npattern; i++) {
 		w += pattern[i];
 	}
 
 	if (npattern & 1) {
-		w += pattern[i];
+		w *= 2;
+		n *= 2;
 	}
 
 	if (w <= 0) return 0;
@@ -866,17 +869,17 @@ int nvgCreateImageDashPattern(NVGcontext* ctx, const int* pattern, int npattern)
 	if (!data) return 0;
 
 	p = data;
-	for (i = 0; i < npattern; i += 2) {
-		n = pattern[i];
-		for (j = 0; j < n; j++, p += 4) {
+	for (i = 0; i < n; i += 2) {
+		run = pattern[i % npattern];
+		for (j = 0; j < run; j++, p += 4) {
 			p[0] = 0xff;
 			p[1] = 0xff;
 			p[2] = 0xff;
 			p[3] = 0xff;
 		}
-
-		if (i + 1 < npattern) n = pattern[i + 1];
-		for (j = 0; j < n; j++, p += 4) {
+				
+		run = pattern[(i + 1) % npattern];
+		for (j = 0; j < run; j++, p += 4) {
 			p[0] = 0;
 			p[1] = 0;
 			p[2] = 0;

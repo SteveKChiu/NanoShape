@@ -107,8 +107,8 @@ public:
     void addCircle(float centerX, float centerY, float radius);
     void addCircle(const QPointF& centerPoint, qreal radius);
 
-    void addPath(const QPolygonF& path);
-    void addPathList(const QList<QPolygonF>& paths);
+    void addPolygon(const QPolygonF& polygon);
+    void addPath(const QPainterPath& path);
 
     void stroke();
     void fill();

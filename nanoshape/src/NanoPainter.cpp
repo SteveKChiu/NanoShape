@@ -12,6 +12,7 @@
 #include "NanoMaterial.h"
 #include "nanovg.h"
 
+#include <QPainterPath>
 #include <QPolygonF>
 #include <QQuickItem>
 #include <QQuickWindow>
@@ -704,6 +705,7 @@ QTransform NanoPainter::transform() const
 
 void NanoPainter::setTransform(const QTransform& t)
 {
+    nvgResetTransform(d->m_nvg);
     nvgTransform(d->m_nvg, float(t.m11()), float(t.m12()), float(t.m21()), float(t.m22()), float(t.m31()), float(t.m32()));
 }
 
@@ -947,7 +949,7 @@ void NanoPainter::addCircle(const QPointF& center, qreal radius)
     nvgCircle(d->m_nvg, float(center.x()), float(center.y()), float(radius));
 }
 
-void NanoPainter::addPath(const QPolygonF& path)
+void NanoPainter::addPolygon(const QPolygonF& path)
 {
     if (path.count() < 2) return;
 
@@ -965,10 +967,19 @@ void NanoPainter::addPath(const QPolygonF& path)
     }
 }
 
-void NanoPainter::addPathList(const QList<QPolygonF>& paths)
+void NanoPainter::addPath(const QPainterPath& path)
 {
-    for (auto& path : paths) {
-        addPath(path);
+    for (int i = 0, n = path.elementCount(); i < n; ++i) {
+        auto p = path.elementAt(i);
+        if (p.isMoveTo()) {
+            moveTo(p);
+        } else if (p.isLineTo()) {
+            lineTo(p);
+        } else {
+            QPointF c2 = path.elementAt(++i);
+            QPointF ep = path.elementAt(++i);
+            bezierTo(p, c2, ep);
+        }
     }
 }
 

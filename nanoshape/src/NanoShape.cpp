@@ -31,19 +31,54 @@ NanoShapePainter::~NanoShapePainter()
     // do nothing
 }
 
+QMatrix4x4 NanoShapePainter::transformMatrix() const
+{
+    return transform();
+}
+
+void NanoShapePainter::setTransformMatrix(const QMatrix4x4& matrix)
+{
+    setTransform(matrix.toTransform());
+}
+
+void NanoShapePainter::resetTransform()
+{
+    NanoPainter::resetTransform();
+}
+
+void NanoShapePainter::preTranslate(qreal x, qreal y)
+{
+    NanoPainter::preTranslate(x, y);
+}
+
+void NanoShapePainter::preRotate(qreal degree)
+{
+    NanoPainter::preRotate(degree);
+}
+
+void NanoShapePainter::preScale(qreal sx, qreal sy)
+{
+    NanoPainter::preScale(sx, sy);
+}
+
+void NanoShapePainter::preSkewX(qreal degree)
+{
+    NanoPainter::preSkewX(degree);
+}
+
+void NanoShapePainter::preSKewY(qreal degree)
+{
+    NanoPainter::preSKewY(degree);
+}
+
+void NanoShapePainter::preShear(qreal sh, qreal sv)
+{
+    NanoPainter::preShear(sh, sv);
+}
+
 void NanoShapePainter::postTranslate(qreal x, qreal y)
 {
     NanoPainter::postTranslate(x, y);
-}
-
-void NanoShapePainter::postRotate(qreal degree)
-{
-    NanoPainter::postRotate(degree);
-}
-
-void NanoShapePainter::postShear(qreal sh, qreal sv)
-{
-    NanoPainter::postShear(sh, sv);
 }
 
 void NanoShapePainter::postScale(qreal sx, qreal sy)
@@ -51,9 +86,24 @@ void NanoShapePainter::postScale(qreal sx, qreal sy)
     NanoPainter::postScale(sx, sy);
 }
 
-void NanoShapePainter::resetTransform()
+void NanoShapePainter::postRotate(qreal degree)
 {
-    NanoPainter::resetTransform();
+    NanoPainter::postRotate(degree);
+}
+
+void NanoShapePainter::postSkewX(qreal degree)
+{
+    NanoPainter::postSkewX(degree);
+}
+
+void NanoShapePainter::postSKewY(qreal degree)
+{
+    NanoPainter::postSKewY(degree);
+}
+
+void NanoShapePainter::postShear(qreal sh, qreal sv)
+{
+    NanoPainter::postShear(sh, sv);
 }
 
 void NanoShapePainter::setCompositeStyle(int op)

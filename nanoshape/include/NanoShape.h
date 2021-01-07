@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <QMatrix4x4>
 #include <QQuickItem>
 
 #include "NanoPainter.h"
@@ -24,11 +25,23 @@ public:
     explicit NanoShapePainter(QQuickItem* item);
     virtual ~NanoShapePainter();
 
-    Q_INVOKABLE void postTranslate(qreal x, qreal y);
-    Q_INVOKABLE void postRotate(qreal degree);
-    Q_INVOKABLE void postShear(qreal sh, qreal sv);
-    Q_INVOKABLE void postScale(qreal sx, qreal sy);
+    Q_INVOKABLE QMatrix4x4 transformMatrix() const;
+    Q_INVOKABLE void setTransformMatrix(const QMatrix4x4& matrix);
     Q_INVOKABLE void resetTransform();
+
+    Q_INVOKABLE void preTranslate(qreal x, qreal y);
+    Q_INVOKABLE void preScale(qreal sx, qreal sy);
+    Q_INVOKABLE void preRotate(qreal degree);
+    Q_INVOKABLE void preSkewX(qreal degree);
+    Q_INVOKABLE void preSKewY(qreal degree);
+    Q_INVOKABLE void preShear(qreal sh, qreal sv);
+
+    Q_INVOKABLE void postTranslate(qreal x, qreal y);
+    Q_INVOKABLE void postScale(qreal sx, qreal sy);
+    Q_INVOKABLE void postRotate(qreal degree);
+    Q_INVOKABLE void postSkewX(qreal degree);
+    Q_INVOKABLE void postSKewY(qreal degree);
+    Q_INVOKABLE void postShear(qreal sh, qreal sv);
 
     // see NanoShape.CompositeStyle
     Q_INVOKABLE void setCompositeStyle(int op);

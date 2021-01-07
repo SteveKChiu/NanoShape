@@ -48,13 +48,23 @@ public:
     void reset();
     void reset(QSGNode* oldNode);
 
-    QTransform transform() const;
+    const QTransform& transform() const;
     void setTransform(const QTransform& transform);
-    void postTranslate(qreal x, qreal y);
-    void postRotate(qreal degree);
-    void postShear(qreal sh, qreal sv);
-    void postScale(qreal sx, qreal sy);
     void resetTransform();
+
+    void preTranslate(qreal x, qreal y);
+    void preScale(qreal sx, qreal sy);
+    void preRotate(qreal degree);
+    void preSkewX(qreal degree);
+    void preSKewY(qreal degree);
+    void preShear(qreal sh, qreal sv);
+
+    void postTranslate(qreal x, qreal y);
+    void postScale(qreal sx, qreal sy);
+    void postRotate(qreal degree);
+    void postSkewX(qreal degree);
+    void postSKewY(qreal degree);
+    void postShear(qreal sh, qreal sv);
 
     Composite compositeOperation() const;
     void setCompositeOperation(Composite op);

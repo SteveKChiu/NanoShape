@@ -263,6 +263,7 @@ public:
     bool m_deferred;
 
     QString m_pathName;
+    QTransform m_transform;
     qreal m_miterLimit = 10;
     Qt::PenCapStyle m_capStyle = Qt::FlatCap;
     Qt::PenJoinStyle m_joinStyle = Qt::MiterJoin;
@@ -278,6 +279,7 @@ public:
     NanoPainterPrivate(QQuickItem* item, QSGNode* node, bool deferred);
     ~NanoPainterPrivate();
 
+    void applyTransform();
     void reset(QSGNode* node, bool deferred);
     void beginPath(const QString& name = {});
     void beginUpdate(QSGNode* node);
@@ -323,12 +325,19 @@ NanoPainterPrivate::~NanoPainterPrivate()
     nvgDeleteInternal(m_nvg);
 }
 
+void NanoPainterPrivate::applyTransform()
+{
+    auto& t = m_transform;
+    nvgSetTransform(m_nvg, float(t.m11()), float(t.m12()), float(t.m21()), float(t.m22()), float(t.m31()), float(t.m32()));
+}
+
 void NanoPainterPrivate::reset(QSGNode* node, bool deferred)
 {
     m_params.edgeAntiAlias = m_item->antialiasing();
     nvgBeginFrame(m_nvg, float(m_item->width()), float(m_item->height()), 1);
     beginPath();
 
+    m_transform.reset();
     m_miterLimit = 10;
     m_capStyle = Qt::FlatCap;
     m_joinStyle = Qt::MiterJoin;
@@ -696,44 +705,93 @@ void NanoPainter::reset(QSGNode* oldNode)
     d->reset(oldNode, false);
 }
 
-QTransform NanoPainter::transform() const
+const QTransform& NanoPainter::transform() const
 {
-    float m[6];
-    nvgCurrentTransform(d->m_nvg, m);
-    return { qreal(m[0]), qreal(m[1]), qreal(m[2]), qreal(m[3]), qreal(m[4]), qreal(m[5]) };
+    return d->m_transform;
 }
 
 void NanoPainter::setTransform(const QTransform& t)
 {
-    nvgResetTransform(d->m_nvg);
-    nvgTransform(d->m_nvg, float(t.m11()), float(t.m12()), float(t.m21()), float(t.m22()), float(t.m31()), float(t.m32()));
-}
-
-void NanoPainter::postTranslate(qreal x, qreal y)
-{
-    nvgTranslate(d->m_nvg, float(x), float(y));
-}
-
-void NanoPainter::postRotate(qreal degree)
-{
-    nvgRotate(d->m_nvg, nvgDegToRad(float(degree)));
-}
-
-void NanoPainter::postShear(qreal sh, qreal sv)
-{
-    auto trans = transform();
-    trans.shear(sh, sv);
-    setTransform(trans);
-}
-
-void NanoPainter::postScale(qreal sx, qreal sy)
-{
-    nvgScale(d->m_nvg, float(sx), float(sy));
+    d->m_transform = t;
+    d->applyTransform();
 }
 
 void NanoPainter::resetTransform()
 {
+    d->m_transform.reset();
     nvgResetTransform(d->m_nvg);
+}
+
+void NanoPainter::preTranslate(qreal x, qreal y)
+{
+    d->m_transform.translate(x, y);
+    d->applyTransform();
+}
+
+void NanoPainter::preScale(qreal sx, qreal sy)
+{
+    d->m_transform.scale(sx, sy);
+    d->applyTransform();
+}
+
+void NanoPainter::preRotate(qreal degree)
+{
+    d->m_transform.rotate(degree);
+    d->applyTransform();
+}
+
+void NanoPainter::preSkewX(qreal degree)
+{
+    d->m_transform.shear(std::tan(qDegreesToRadians(degree)), 0);
+    d->applyTransform();
+}
+
+void NanoPainter::preSKewY(qreal degree)
+{
+    d->m_transform.shear(0, std::tan(qDegreesToRadians(degree)));
+    d->applyTransform();
+}
+
+void NanoPainter::preShear(qreal sh, qreal sv)
+{
+    d->m_transform.shear(sh, sv);
+    d->applyTransform();
+}
+
+void NanoPainter::postTranslate(qreal x, qreal y)
+{
+    d->m_transform *= QTransform::fromTranslate(x, y);
+    d->applyTransform();
+}
+
+void NanoPainter::postRotate(qreal degree)
+{
+    d->m_transform *= QTransform().rotate(degree);
+    d->applyTransform();
+}
+
+void NanoPainter::postScale(qreal sx, qreal sy)
+{
+    d->m_transform *= QTransform::fromScale(sx, sy);
+    d->applyTransform();
+}
+
+void NanoPainter::postSkewX(qreal degree)
+{
+    d->m_transform *= QTransform().shear(std::tan(qDegreesToRadians(degree)), 0);
+    d->applyTransform();
+}
+
+void NanoPainter::postSKewY(qreal degree)
+{
+    d->m_transform *= QTransform().shear(0, std::tan(qDegreesToRadians(degree)));
+    d->applyTransform();
+}
+
+void NanoPainter::postShear(qreal sh, qreal sv)
+{
+    d->m_transform *= QTransform().shear(sh, sv);
+    d->applyTransform();
 }
 
 NanoPainter::Composite NanoPainter::compositeOperation() const

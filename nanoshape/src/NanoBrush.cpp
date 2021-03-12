@@ -136,7 +136,7 @@ NanoBrush NanoBrush::dashPattern(const QColor& color, const QVector<qreal>& patt
     p.image = 2;
     p.innerColor = p.outerColor = toNVGcolor(color);
     p.dashRun = x;
-    p.dashOffset = float(offset);
+    p.dashOffset = float(offset * DASH_PATTERN_DIVS);
     p.dashUnit = float(unitWidth / DASH_PATTERN_DIVS);
 
     NanoBrush brush(p);

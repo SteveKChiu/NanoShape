@@ -3,10 +3,10 @@ INCLUDEPATH += \
 
 LIBS += \
     -L$$shadowed($$PWD) \
-    -lnanoshape
+    -l$$qt5LibraryTarget(nanoshape)
 
 win32-msvc*:POST_TARGETDEPS += \
-    $$shadowed($$PWD)/nanoshape.lib
+    $$shadowed($$PWD)/$$qt5LibraryTarget(nanoshape).lib
 
 else::POST_TARGETDEPS += \
-    $$shadowed($$PWD)/libnanoshape.a
+    $$shadowed($$PWD)/lib$$qt5LibraryTarget(nanoshape).a

@@ -18,6 +18,7 @@
 #include <QQuickWindow>
 #include <QSGGeometryNode>
 #include <QSGTexture>
+#include <QtMath>
 
 #ifndef NANOSHAPE_TRACE
 #define NANOSHAPE_TRACE 0
@@ -1060,30 +1061,29 @@ static bool updatePaintNodeBrush(QQuickItem* item, QSGNode* root, const QString&
 {
     if (!root || name.isEmpty() || !item || !item->window()) return false;
 
-    NanoMaterial* mat = nullptr;
     auto node = root->firstChild();
+    bool updated = false;
 
     while (node) {
-        auto m = static_cast<NanoMaterial*>(static_cast<QSGGeometryNode*>(node)->material());
-        if (m->name() == name) {
-            mat = m;
-            break;
+        auto mat = static_cast<NanoMaterial*>(static_cast<QSGGeometryNode*>(node)->material());
+        if (mat->name() == name) {
+            auto info = mat->info();
+            updateMaterial(item->window(), mat, info, brush.paint(), brush.image());
+            updated = true;
+
+            auto rest = node;
+            while (rest) {
+                auto m = static_cast<QSGGeometryNode*>(rest)->material();
+                if (m == mat) {
+                    rest->markDirty(QSGNode::DirtyMaterial);
+                }
+                rest = rest->nextSibling();
+            }
         }
         node = node->nextSibling();
     }
 
-    if (!mat) return false;
-    auto info = mat->info();
-    updateMaterial(item->window(), mat, info, brush.paint(), brush.image());
-
-    while (node) {
-        auto m = static_cast<QSGGeometryNode*>(node)->material();
-        if (m == mat) {
-            node->markDirty(QSGNode::DirtyMaterial);
-        }
-        node = node->nextSibling();
-    }
-    return true;
+    return updated;
 }
 
 bool NanoPainter::updatePaintNodeStrokeBrush(QQuickItem* item, QSGNode* node, const QString& name, const NanoBrush& brush)

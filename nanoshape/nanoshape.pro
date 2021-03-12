@@ -2,6 +2,7 @@ TEMPLATE = lib
 CONFIG += staticlib c++17
 CONFIG -= debug_and_release
 QT += quick
+TARGET = $$qt5LibraryTarget(nanoshape)
 
 DEFINES += \
     NVG_NO_STB \

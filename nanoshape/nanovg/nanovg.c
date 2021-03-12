@@ -2392,11 +2392,6 @@ void nvgStroke(NVGcontext* ctx)
     const NVGpath* path;
     int i;
 
-    if (strokePaint.dashRun) {
-        if (strokePaint.dashUnit < 0) strokePaint.dashUnit *= -strokeWidth;
-        strokePaint.dashOffset *= strokePaint.dashUnit;
-    }
-
     if (strokeWidth < ctx->fringeWidth) {
         // If the stroke width is less than pixel size, use alpha to emulate coverage.
         // Since coverage is area, scale by alpha*alpha.

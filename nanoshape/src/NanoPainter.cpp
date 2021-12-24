@@ -1079,6 +1079,7 @@ static bool updatePaintNodeBrush(QQuickItem* item, QSGNode* root, const QString&
                 }
                 rest = rest->nextSibling();
             }
+            break;
         }
         node = node->nextSibling();
     }

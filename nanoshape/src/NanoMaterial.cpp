@@ -390,5 +390,5 @@ int NanoMaterial::compare(const QSGMaterial* other) const
     if (m_composite != that->m_composite) return m_composite < that->m_composite ? -1 : 1;
     if (m_texture != that->m_texture) return m_texture < that->m_texture ? -1 : 1;
     if (m_info != that->m_info) return this < that ? -1 : 1;
-    return 0;
+    return this < that ? -1 : 1;
 }

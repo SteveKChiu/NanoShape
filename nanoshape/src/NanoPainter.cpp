@@ -583,7 +583,7 @@ static void updateMaterial(QQuickWindow* window, NanoMaterial* mat, NanoMaterial
             QImage dummy(4, 4, QImage::Format_RGBA8888_Premultiplied);
             dummy.fill(Qt::transparent);
             dummyTexture = window->createTextureFromImage(dummy);
-            dummyTextureConnection = QQuickWindow::connect(window, &QQuickWindow::sceneGraphAboutToStop, [] {
+            dummyTextureConnection = QQuickWindow::connect(window, &QQuickWindow::sceneGraphInvalidated, [] {
                 QQuickWindow::disconnect(dummyTextureConnection);
                 dummyTextureConnection = {};
                 delete dummyTexture;

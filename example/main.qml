@@ -1,7 +1,6 @@
 import QtQuick 2.12
 import QtQuick.Controls 2.12
 
-import NanoShape 1.0
 import NanoShapeExample 1.0
 
 ApplicationWindow {
@@ -47,11 +46,12 @@ ApplicationWindow {
         onStrokeColorChanged: _shape.markDirty()
         onStrokeWidthChanged: _shape.markDirty()
 
-        onPaint: {
+        onPaint: (painter) => {
             painter.moveTo(10, 10)
             painter.bezierTo(100, 200, 100, 300, _shape.width, _shape.height)
             painter.setStrokeWidth(_shape.strokeWidth)
-            painter.setStrokeStyle(painter.dashPattern(_shape.strokeColor, [4, 1, 1, 1]))
+            painter.setDashPattern([4, 1, 1, 1])
+            painter.setStrokeStyle(_shape.strokeColor)
             painter.stroke()
         }
     }

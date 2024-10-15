@@ -1,6 +1,0 @@
-<RCC>
-    <qresource prefix="/NanoShape">
-        <file>NanoLegacyShader.vert</file>
-        <file>NanoLegacyShader.frag</file>
-    </qresource>
-</RCC>

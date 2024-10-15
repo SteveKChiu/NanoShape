@@ -1,32 +1,43 @@
-//*
-//* https://github.com/SteveKChiu/nanoshape
-//*
-//* Copyright 2020, Steve K. Chiu <steve.k.chiu@gmail.com>
-//*
-//* This Source Code Form is subject to the terms of the Mozilla Public
-//* License, v. 2.0. If a copy of the MPL was not distributed with this
-//* file, You can obtain one at https://mozilla.org/MPL/2.0/.
-//*
+//
+// https://github.com/SteveKChiu/nanoshape
+//
+// Copyright 2024, Steve K. Chiu <steve.k.chiu@gmail.com>
+//
+// The MIT License (http://www.opensource.org/licenses/mit-license.php)
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+//
 
 #include "NanoMaterial.h"
 
 #include <QSGMaterialShader>
 #include <QSGTexture>
-
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-using QSGMaterialRhiShader = QSGMaterialShader;
-#elif QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
-#include <QSGMaterialRhiShader>
-#endif
+#include <QQuickWindow>
 
 //---------------------------------------------------------------------------
 
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 
-class NanoMaterialRhiShader : public QSGMaterialRhiShader
+class NanoMaterialShader : public QSGMaterialShader
 {
 public:
-    NanoMaterialRhiShader()
+    NanoMaterialShader()
     {
         setFlag(UpdatesGraphicsPipelineState);
         setShaderFileName(VertexStage, QLatin1String(":/NanoShape/NanoShader.vert.qsb"));
@@ -47,8 +58,8 @@ public:
         bool changed = false;
 
         if (state.isMatrixDirty()) {
-            const QMatrix4x4 m = state.combinedMatrix();
-            memcpy(buf.data(), m.data(), 64);
+            const QMatrix4x4 mat = state.combinedMatrix();
+            memcpy(buf.data(), mat.data(), 64);
             changed = true;
         }
 
@@ -72,11 +83,7 @@ public:
         if (binding != 1) return;
         auto m = static_cast<NanoMaterial*>(material);
         auto t = m->texture();
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-        if (t) t->updateRhiTexture(state.rhi(), state.resourceUpdateBatch());
-#else
         if (t) t->commitTextureOperations(state.rhi(), state.resourceUpdateBatch());
-#endif
         *texture = t;
     }
 
@@ -153,14 +160,14 @@ class NanoMaterialShader : public QSGMaterialShader
 public:
     NanoMaterialShader()
     {
-        setShaderSourceFile(QOpenGLShader::Vertex, QLatin1String(":/NanoShape/NanoLegacyShader.vert"));
-        setShaderSourceFile(QOpenGLShader::Fragment, QLatin1String(":/NanoShape/NanoLegacyShader.frag"));
+        setShaderSourceFile(QOpenGLShader::Vertex, QLatin1String(":/NanoShape/NanoShaderGLES.vert"));
+        setShaderSourceFile(QOpenGLShader::Fragment, QLatin1String(":/NanoShape/NanoShaderGLES.frag"));
     }
 
     virtual void initResource()
     {
         // it is fine this function is never called, this is just to make sure it is linked
-        Q_INIT_RESOURCE(NanoLegacyShaders);
+        Q_INIT_RESOURCE(NanoShadersGLES);
     }
 
     virtual void initialize() override
@@ -178,8 +185,6 @@ public:
         m_id_feather = p->uniformLocation("feather");
         m_id_strokeMultiply = p->uniformLocation("strokeMultiply");
         m_id_strokeThreshold = p->uniformLocation("strokeThreshold");
-        m_id_dashOffset = p->uniformLocation("dashOffset");
-        m_id_dashUnit = p->uniformLocation("dashUnit");
         m_id_type = p->uniformLocation("type");
         m_id_edgeAA = p->uniformLocation("edgeAA");
     }
@@ -214,8 +219,6 @@ public:
             p->setUniformValue(m_id_feather, info.feather);
             p->setUniformValue(m_id_strokeMultiply, info.strokeMultiply);
             p->setUniformValue(m_id_strokeThreshold, info.strokeThreshold);
-            p->setUniformValue(m_id_dashOffset, info.dashOffset);
-            p->setUniformValue(m_id_dashUnit, info.dashUnit);
             p->setUniformValue(m_id_type, info.type);
             p->setUniformValue(m_id_edgeAA, info.edgeAA);
         }
@@ -291,8 +294,6 @@ private:
     int m_id_feather;
     int m_id_strokeMultiply;
     int m_id_strokeThreshold;
-    int m_id_dashOffset;
-    int m_id_dashUnit;
     int m_id_type;
     int m_id_edgeAA;
 };
@@ -314,10 +315,6 @@ bool NanoMaterial::UniformBuffer::operator==(const NanoMaterial::UniformBuffer& 
 NanoMaterial::NanoMaterial()
 {
     setFlag(Blending);
-
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0) && QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    setFlag(SupportsRhiShader);
-#endif
 }
 
 NanoMaterial::~NanoMaterial()
@@ -350,6 +347,42 @@ void NanoMaterial::setTexture(QSGTexture* texture, bool owned)
     if (m_textureOwned) delete m_texture;
     m_texture = texture;
     m_textureOwned = owned;
+    m_textureImage = {};
+}
+
+void NanoMaterial::setTextureImage(QQuickWindow* window, const QImage& image)
+{
+    if (m_texture && m_textureImage == image) return;
+
+    QSGTexture* texture = nullptr;
+    bool textureOwned = true;
+
+    if (!image.isNull()) {
+        texture = window->createTextureFromImage(image);
+    }
+
+    if (!texture) {
+        static QHash<QQuickWindow*, QPair<QSGTexture*, QMetaObject::Connection>> dummyTextures;
+        auto& [dummyTexture, dummyTextureConnection] = dummyTextures[window];
+
+        if (!dummyTexture) {
+            QImage dummyImage(4, 4, QImage::Format_RGBA8888_Premultiplied);
+            dummyImage.fill(Qt::transparent);
+
+            dummyTexture = window->createTextureFromImage(dummyImage);
+            dummyTextureConnection = QQuickWindow::connect(window, &QQuickWindow::sceneGraphInvalidated, [window] {
+                auto [dummyTexture, dummyTextureConnection] = dummyTextures.take(window);
+                QQuickWindow::disconnect(dummyTextureConnection);
+                delete dummyTexture;
+            });
+        }
+
+        texture = dummyTexture;
+        textureOwned = false;
+    }
+
+    setTexture(texture, textureOwned);
+    m_textureImage = image;
 }
 
 void NanoMaterial::setCompositeOperation(NanoPainter::Composite op)
@@ -367,16 +400,13 @@ QSGMaterialType* NanoMaterial::type() const
 
 QSGMaterialShader* NanoMaterial::createShader(QSGRendererInterface::RenderMode) const
 {
-    return new NanoMaterialRhiShader;
+    return new NanoMaterialShader;
 }
 
 #else
 
 QSGMaterialShader* NanoMaterial::createShader() const
 {
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
-    if (flags() & RhiShaderWanted) return new NanoMaterialRhiShader;
-#endif
     return new NanoMaterialShader;
 }
 

@@ -28,22 +28,8 @@ SOURCES += \
     src/NanoShape.cpp
 
 DISTFILES += \
-    shaders/NanoLegacyShader.vert \
-    shaders/NanoLegacyShader.frag \
-    shaders/NanoShader.vert \
-    shaders/NanoShader.frag
+    shaders/NanoShaderGLES.vert \
+    shaders/NanoShaderGLES.frag
 
-versionAtLeast(QT_VERSION, 6) {
-    RESOURCES += \
-        shaders/NanoShaders.qrc
-}
-else:versionAtLeast(QT_VERSION, 5.15) {
-    RESOURCES += \
-        shaders/NanoShaders.qrc \
-        shaders/NanoLegacyShaders.qrc \
-}
-else {
-    RESOURCES += \
-        shaders/NanoLegacyShaders.qrc \
-}
-
+RESOURCES += \
+    shaders/NanoShadersGLES.qrc

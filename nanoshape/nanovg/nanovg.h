@@ -50,9 +50,6 @@ struct NVGpaint {
     NVGcolor innerColor;
     NVGcolor outerColor;
     int image;
-    int dashRun;
-    float dashOffset;
-    float dashUnit;
 };
 typedef struct NVGpaint NVGpaint;
 
@@ -271,6 +268,13 @@ void nvgLineCap(NVGcontext* ctx, int cap);
 // Can be one of NVG_MITER (default), NVG_ROUND, NVG_BEVEL.
 void nvgLineJoin(NVGcontext* ctx, int join);
 
+// Set array of dash and gap lengths; the memory is managed by the caller,
+//  i.e., it must remain valid until another value is passed to nvgDashArray or state is popped
+void nvgDashArray(NVGcontext* ctx, float* dashes, int len);
+
+// Set stroke dash offset
+void nvgDashOffset(NVGcontext* ctx, float offset);
+
 // Sets the transparency applied to all rendered shapes.
 // Already transparent paths will get proportionally more transparent as well.
 void nvgGlobalAlpha(NVGcontext* ctx, float alpha);
@@ -291,6 +295,9 @@ void nvgGlobalAlpha(NVGcontext* ctx, float alpha);
 // specific transformation matrix and pre-multiplies the current transformation by it.
 //
 // Current coordinate system (transformation) can be saved and restored using nvgSave() and nvgRestore().
+//
+// In the initial coordinate system (transformation matrix = identity matrix), (0.0, 0.0) corresponds to the
+//  upper-left corner of the upper-left pixel, with positive x to the right and positive y down
 
 // Resets current transform to a identity matrix.
 void nvgResetTransform(NVGcontext* ctx);
@@ -385,12 +392,6 @@ int nvgCreateImageMem(NVGcontext* ctx, int imageFlags, unsigned char* data, int 
 // Returns handle to the image.
 int nvgCreateImageRGBA(NVGcontext* ctx, int w, int h, int imageFlags, const unsigned char* data);
 
-// Creates image from specified dash pattern. The value at even position is the stroke length,
-// the value at odd position is the gap length. If npattern is odd number, then the list of
-// values is repeated to yield an even number of values.
-// Returns handle to the image.
-int nvgCreateImageDashPattern(NVGcontext* ctx, const int* pattern, int npattern);
-
 // Updates image data specified by image handle.
 void nvgUpdateImage(NVGcontext* ctx, int image, const unsigned char* data);
 
@@ -431,12 +432,6 @@ NVGpaint nvgRadialGradient(NVGcontext* ctx, float cx, float cy, float inr, float
 // The gradient is transformed by the current transform when it is passed to nvgFillPaint() or nvgStrokePaint().
 NVGpaint nvgImagePattern(NVGcontext* ctx, float ox, float oy, float ex, float ey,
                          float angle, int image, float alpha);
-
-// Creates and returns a dash pattern. Parameters (dashOffset) specify the dash pattern offset (in unit width),
-// (dashUnitWidth) the unit width of dash patten and offset, if dashUnitWidth < 0, then it would be scaled with strokeWidth.
-// (image) is handle created by nvgCreateImageDashPattern.
-// This should only be passed to nvgStrokePaint().
-NVGpaint nvgDashPattern(NVGcontext* ctx, NVGcolor color, int image, float dashOffset, float dashUnitWidth);
 
 //
 // Scissoring
@@ -698,6 +693,8 @@ NVGcontext* nvgCreateInternal(NVGparams* params);
 void nvgDeleteInternal(NVGcontext* ctx);
 
 NVGparams* nvgInternalParams(NVGcontext* ctx);
+
+int nvgInternalCommands(NVGcontext* ctx, float** buffer);
 
 // Debug function to dump cached path data.
 void nvgDebugDumpPathCache(NVGcontext* ctx);

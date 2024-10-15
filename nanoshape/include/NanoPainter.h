@@ -1,12 +1,28 @@
-//*
-//* https://github.com/SteveKChiu/nanoshape
-//*
-//* Copyright 2020, Steve K. Chiu <steve.k.chiu@gmail.com>
-//*
-//* This Source Code Form is subject to the terms of the Mozilla Public
-//* License, v. 2.0. If a copy of the MPL was not distributed with this
-//* file, You can obtain one at https://mozilla.org/MPL/2.0/.
-//*
+//
+// https://github.com/SteveKChiu/nanoshape
+//
+// Copyright 2024, Steve K. Chiu <steve.k.chiu@gmail.com>
+//
+// The MIT License (http://www.opensource.org/licenses/mit-license.php)
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+//
 
 #pragma once
 
@@ -40,10 +56,12 @@ public:
     };
 
 public:
-    explicit NanoPainter(QQuickItem* item);
-    NanoPainter(QQuickItem* item, QSGNode* oldNode);
+    explicit NanoPainter(QQuickItem* item, float itemPixelRatio = 0);
+    NanoPainter(QQuickItem* item, QSGNode* oldNode, float itemPixelRatio = 0);
     NanoPainter(NanoPainter&&) = delete;
     ~NanoPainter();
+
+    float itemPixelRatio() const;
 
     void reset();
     void reset(QSGNode* oldNode);
@@ -78,6 +96,16 @@ public:
     Qt::PenJoinStyle joinStyle() const;
     void setJoinStyle(Qt::PenJoinStyle style);
 
+    // the dash offset will be scaled with stroke width
+    // just like QPen::dashOffset
+    qreal dashOffset() const;
+    void setDashOffset(qreal offset);
+
+    // the dash pattern will be scaled with stroke width
+    // just like QPen::dashPattern
+    QVector<qreal> dashPattern() const;
+    void setDashPattern(const QVector<qreal>& pattern);
+
     qreal strokeWidth() const;
     void setStrokeWidth(qreal width);
 
@@ -88,6 +116,7 @@ public:
     void setFillBrush(const NanoBrush& brush);
 
     void beginPath(const QString& name = {});
+
     void moveTo(float x, float y);
     void moveTo(const QPointF& point);
     void lineTo(float x, float y);
@@ -98,7 +127,7 @@ public:
     void quadTo(const QPointF& controlPoint, const QPointF& endPoint);
     void arcTo(float c1x, float c1y, float c2x, float c2y, float radius);
     void arcTo(const QPointF& controlPoint1, const QPointF& controlPoint2, qreal radius);
-    void closePath();
+    void closeSubpath();
 
     void addArc(float cx, float cy, float radius, float angle0, float angle1, bool clockwise = true);
     void addArc(const QPointF& centerPoint, qreal radius, qreal angle0, qreal angle1, bool clockwise = true);
@@ -120,11 +149,14 @@ public:
     void addPolygon(const QPolygonF& polygon);
     void addPath(const QPainterPath& path);
 
+    void asInverted();
+
     void stroke();
     void fill();
 
     QSGNode* updatePaintNode(QSGNode* node = nullptr);
 
+    static float itemPixelRatio(QQuickItem* item);
     static bool updatePaintNodeStrokeBrush(QQuickItem* item, QSGNode* node, const QString& name, const NanoBrush& brush);
     static bool updatePaintNodeFillBrush(QQuickItem* item, QSGNode* node, const QString& name, const NanoBrush& brush);
 

@@ -24,42 +24,21 @@
 // DEALINGS IN THE SOFTWARE.
 //
 
-#include <QGuiApplication>
-#include <QQmlApplicationEngine>
+#pragma once
 
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 #include "NanoShape.h"
-#include "NanoShapeExample.h"
-#endif
 
-//---------------------------------------------------------------------------
-
-static void registerQmlTypes()
+class Import_NanoShape
 {
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    // register nano shape types
-    qmlRegisterType<NanoShape>("NanoShapeExample", 1, 0, "NanoShape");
-    qmlRegisterUncreatableType<NanoShapePainter>("NanoShapeExample", 1, 0, "NanoShapePainter", "inner class of NanoShape");
+    Q_GADGET
+    QML_NAMED_ELEMENT(NanoShape)
+    QML_FOREIGN(NanoShape)
+};
 
-    // register c++ example
-    qmlRegisterType<NanoShapeExample>("NanoShapeExample", 1, 0, "NanoShapeExample");
-#endif
-}
-
-int Q_DECL_EXPORT main(int argc, char* argv[])
+class Import_NanoShapePainter
 {
-    qputenv("QSG_INFO", "1");
-    QGuiApplication app(argc, argv);
-    QQmlApplicationEngine engine;
-    registerQmlTypes();
-
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    engine.load(QUrl("qrc:///main.qml"));
-#else
-    engine.addImportPath(QGuiApplication::applicationDirPath() + "/qml");
-    engine.addImportPath("qrc:///qml");
-    engine.load("qrc:///qml/NanoShapeExample/main.qml");
-#endif
-
-    return app.exec();
-}
+    Q_GADGET
+    QML_NAMED_ELEMENT(NanoShapePainter)
+    QML_FOREIGN(NanoShapePainter)
+    QML_UNCREATABLE("internal class")
+};

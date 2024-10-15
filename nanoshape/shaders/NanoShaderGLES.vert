@@ -5,7 +5,7 @@ attribute highp vec2 tcoord;
 varying highp vec2 ftcoord;
 varying highp vec2 fpos;
 
-void main(void) {
+void main() {
     gl_Position = qt_Matrix * vertex;
     ftcoord = tcoord;
     fpos = vertex.xy;

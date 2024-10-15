@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/NanoShape">
+        <file>NanoShaderGLES.vert</file>
+        <file>NanoShaderGLES.frag</file>
+    </qresource>
+</RCC>

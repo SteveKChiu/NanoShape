@@ -1,12 +1,28 @@
-//*
-//* https://github.com/SteveKChiu/nanoshape
-//*
-//* Copyright 2020, Steve K. Chiu <steve.k.chiu@gmail.com>
-//*
-//* This Source Code Form is subject to the terms of the Mozilla Public
-//* License, v. 2.0. If a copy of the MPL was not distributed with this
-//* file, You can obtain one at https://mozilla.org/MPL/2.0/.
-//*
+//
+// https://github.com/SteveKChiu/nanoshape
+//
+// Copyright 2024, Steve K. Chiu <steve.k.chiu@gmail.com>
+//
+// The MIT License (http://www.opensource.org/licenses/mit-license.php)
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+//
 
 #include "NanoPainter.h"
 #include "NanoMaterial.h"
@@ -20,6 +36,8 @@
 #include <QSGTexture>
 #include <QtMath>
 
+#include <private/qtriangulator_p.h>
+
 #ifndef NANOSHAPE_TRACE
 #define NANOSHAPE_TRACE 0
 #endif
@@ -28,6 +46,28 @@
 #include <QDebug>
 #endif
 
+#define NVG_MOVETO 0
+#define NVG_LINETO 1
+#define NVG_BEZIERTO 2
+#define NVG_CLOSE 3
+#define NVG_WINDING 4
+
+//---------------------------------------------------------------------------
+
+// triangle fan not supported on some backend, e.g. direct3d
+// convert it to triangle strip
+static NVGvertex* copyTriangleStripFromFan(NVGvertex* strip, const NVGvertex* fan, int count)
+{
+    for (int i = 0; i < count; ++i) {
+        auto pos = i / 2;
+        if (i & 1) {
+            pos = count - 1 - pos;
+        }
+        *strip++ = fan[pos];
+    }
+    return strip;
+}
+
 //---------------------------------------------------------------------------
 
 struct NanoPainterCall
@@ -35,10 +75,32 @@ struct NanoPainterCall
     struct Geometry
     {
         unsigned mode;
-        std::vector<NVGvertex> data;
+        std::vector<NVGvertex> vertexData;
+        QTriangleSet triangleSet;
 
-        Geometry(unsigned m, const NVGvertex* p, int n)
-            : mode(m), data(p, p + n) {}
+        Geometry(unsigned m)
+            : mode(m) { }
+
+        Geometry(const QTriangleSet& tri)
+            : mode(QSGGeometry::DrawTriangles), triangleSet(tri) { }
+
+        void addVertexData(const NVGvertex* p, int n, bool fan = false)
+        {
+            if (n == 0) return;
+
+            if (!vertexData.empty()) {
+                vertexData.emplace_back(vertexData.back());
+                vertexData.emplace_back(*p);
+            }
+
+            if (fan) {
+                auto pos = vertexData.size();
+                vertexData.resize(pos + n);
+                copyTriangleStripFromFan(&vertexData[pos], p, n);
+            } else {
+                vertexData.insert(vertexData.end(), p, p + n);
+            }
+        }
     };
 
     QString name;
@@ -49,6 +111,28 @@ struct NanoPainterCall
     float strokeWidth = 0;
     float strokeThreshold = 0;
     std::vector<Geometry> data;
+
+    void addFill(const NVGpath* paths, int npaths)
+    {
+        NanoPainterCall::Geometry* geo = nullptr;
+        for (int i = 0; i < npaths; ++i) {
+            auto& path = paths[i];
+            if (path.nfill <= 0) continue;
+            if (!geo) geo = &data.emplace_back(QSGGeometry::DrawTriangleStrip);
+            geo->addVertexData(path.fill, path.nfill, true);
+        }
+    }
+
+    void addStroke(const NVGpath* paths, int npaths)
+    {
+        NanoPainterCall::Geometry* geo = nullptr;
+        for (int i = 0; i < npaths; ++i) {
+            auto& path = paths[i];
+            if (path.nstroke <= 0) continue;
+            if (!geo) geo = &data.emplace_back(QSGGeometry::DrawTriangleStrip);
+            geo->addVertexData(path.stroke, path.nstroke);
+        }
+    }
 };
 
 //---------------------------------------------------------------------------
@@ -261,6 +345,7 @@ public:
 
     QQuickItem* m_item;
     QSGNode* m_node;
+    float m_itemPixelRatio = 1;
     bool m_deferred;
 
     QString m_pathName;
@@ -273,13 +358,22 @@ public:
     NanoBrush m_fillBrush = Qt::white;
     NanoPainter::Composite m_composite = NanoPainter::Composite::SourceOver;
 
+    qreal m_dashOffset = 0;
+    QVector<qreal> m_dashArray;
+    QVector<float> m_dashArrayBuf;
+    bool m_dashArrayDirty = false;
+
     std::vector<NanoPainterCall> m_pendingCalls;
     QSGGeometryNode* m_nextFreeNode = nullptr;
     QList<QSGMaterial*> m_freeMaterials;
 
-    NanoPainterPrivate(QQuickItem* item, QSGNode* node, bool deferred);
+    NanoMaterial* m_updateMaterial = nullptr;
+    bool m_updateMaterialTaken = false;
+
+    NanoPainterPrivate(QQuickItem* item, QSGNode* node, float itemPixelRatio, bool deferred);
     ~NanoPainterPrivate();
 
+    float itemPixelRatio();
     void applyTransform();
     void reset(QSGNode* node, bool deferred);
     void beginPath(const QString& name = {});
@@ -287,16 +381,22 @@ public:
     QSGNode* endUpdate(QSGNode* node);
 
     void onRenderFill(NVGpaint* paint, float fringe, const NVGpath* paths, int npaths);
+    void onRenderFillConvex(NVGpaint* paint, float fringe, const NVGpath* paths, int npaths);
     void onRenderStroke(NVGpaint* paint, float fringe, float strokeWidth, const NVGpath* paths, int npaths);
     void onRenderFlush();
 
-    NanoMaterial* addMaterial(const QString& name, NanoPainter::Composite composite, const NVGpaint& paint, const QImage& image, float width, float fringe, float strokeThreshold);
-    QSGGeometryNode* addGeometry(QSGMaterial* material, bool& owned, unsigned mode, const NVGvertex* vertexData, int vertexCount);
+    void beginUpdateVertexData(const QString& name, NanoPainter::Composite composite, const NVGpaint& paint, const QImage& image, float width, float fringe, float strokeThreshold);
+    void updateVertexDataForStroke(const NVGpath* paths, int npaths);
+    void updateVertexDataForFill(const NVGpath* paths, int npaths);
+    void updateVertexData(const QTriangleSet& tri);
+    void updateVertexData(unsigned mode, const std::vector<std::pair<const NVGvertex*, int>>& vertexData);
+    void updateVertexData(unsigned mode, int vertexCount, int indexCount, std::function<void(NVGvertex*, uint*)> loader);
+    void endUpdateVertexData();
 };
 
 //---------------------------------------------------------------------------
 
-NanoPainterPrivate::NanoPainterPrivate(QQuickItem* item, QSGNode* node, bool deferred)
+NanoPainterPrivate::NanoPainterPrivate(QQuickItem* item, QSGNode* node, float itemPixelRatio, bool deferred)
     : m_item(item)
     , m_node(node)
     , m_deferred(deferred)
@@ -317,13 +417,22 @@ NanoPainterPrivate::NanoPainterPrivate(QQuickItem* item, QSGNode* node, bool def
     m_params.renderDelete = &NanoPainterPrivate::renderDelete;
 
     m_nvg = nvgCreateInternal(&m_params);
-    nvgBeginFrame(m_nvg, float(item->width()), float(item->height()), 1);
+    m_itemPixelRatio = itemPixelRatio;
+    nvgBeginFrame(m_nvg, float(item->width()), float(item->height()), this->itemPixelRatio());
     beginUpdate(node);
 }
 
 NanoPainterPrivate::~NanoPainterPrivate()
 {
     nvgDeleteInternal(m_nvg);
+}
+
+float NanoPainterPrivate::itemPixelRatio()
+{
+    if (!qFuzzyIsNull(m_itemPixelRatio)) return m_itemPixelRatio;
+    if (!m_item || !m_item->window()) return 1;
+    m_itemPixelRatio = NanoPainter::itemPixelRatio(m_item);
+    return m_itemPixelRatio;
 }
 
 void NanoPainterPrivate::applyTransform()
@@ -335,7 +444,7 @@ void NanoPainterPrivate::applyTransform()
 void NanoPainterPrivate::reset(QSGNode* node, bool deferred)
 {
     m_params.edgeAntiAlias = m_item->antialiasing();
-    nvgBeginFrame(m_nvg, float(m_item->width()), float(m_item->height()), 1);
+    nvgBeginFrame(m_nvg, float(m_item->width()), float(m_item->height()), itemPixelRatio());
     beginPath();
 
     m_transform.reset();
@@ -408,29 +517,75 @@ QSGNode* NanoPainterPrivate::endUpdate(QSGNode* node)
 void NanoPainterPrivate::onRenderFill(NVGpaint* paint, float fringe, const NVGpath* paths, int npaths)
 {
     if (npaths <= 0) return;
+
+    bool convex = true;
+    for (int i = 0; i < npaths; ++i) {
+        auto path = paths[i];
+        if (path.nfill <= 0) continue;
+        if (!path.convex || path.winding != NVG_CCW) convex = false;
+    }
+
+    if (convex) {
+        onRenderFillConvex(paint, fringe, paths, npaths);
+        return;
+    }
+
     auto name = m_pathName + QLatin1String("_fill");
+    QPainterPath path;
+    QPainterPath p;
+    bool hole = false;
+
+    float* buf;
+    auto n = nvgInternalCommands(m_nvg, &buf);
+
+    for (int i = 0; i < n; ++i) {
+        auto cmd = int(buf[i]);
+        switch (cmd) {
+        case NVG_MOVETO:
+            if (!p.isEmpty()) {
+                if (hole) {
+                    path = path.subtracted(p);
+                } else {
+                    path.addPath(p);
+                }
+                p.clear();
+            }
+            hole = false;
+            p.moveTo(buf[i + 1], buf[i + 2]);
+            i += 2;
+            break;
+        case NVG_LINETO:
+            p.lineTo(buf[i + 1], buf[i + 2]);
+            i += 2;
+            break;
+        case NVG_BEZIERTO:
+            p.cubicTo(buf[i + 1], buf[i + 2], buf[i + 3], buf[i + 4], buf[i + 5], buf[i + 6]);
+            i += 6;
+            break;
+        case NVG_CLOSE:
+            p.closeSubpath();
+            break;
+        case NVG_WINDING:
+            hole = int(buf[i + 1]) == NVG_HOLE;
+            i++;
+            break;
+        }
+    }
+
+    if (!p.isEmpty()) {
+        if (hole) {
+            path = path.subtracted(p);
+        } else {
+            path.addPath(p);
+        }
+    }
+    auto tri = qTriangulate(path);
 
     if (!m_deferred) {
-        auto mat = addMaterial(name, m_composite, *paint, m_fillBrush.image(), fringe, fringe, -1);
-        bool owned = false;
-
-        for (int i = 0; i < npaths; ++i) {
-            auto& path = paths[i];
-            if (path.nfill <= 0) continue;
-            addGeometry(mat, owned, QSGGeometry::DrawTriangleFan, path.fill, path.nfill);
-        }
-
-        if (m_params.edgeAntiAlias) {
-            for (int i = 0; i < npaths; ++i) {
-                auto& path = paths[i];
-                if (path.nstroke <= 0) continue;
-                addGeometry(mat, owned, QSGGeometry::DrawTriangleStrip, path.stroke, path.nstroke);
-            }
-        }
-
-        if (!owned) {
-            m_freeMaterials += mat;
-        }
+        beginUpdateVertexData(name, m_composite, *paint, m_fillBrush.image(), fringe, fringe, -1);
+        updateVertexData(tri);
+        if (m_params.edgeAntiAlias) updateVertexDataForStroke(paths, npaths);
+        endUpdateVertexData();
         return;
     }
 
@@ -442,24 +597,33 @@ void NanoPainterPrivate::onRenderFill(NVGpaint* paint, float fringe, const NVGpa
     call.fringe = fringe;
     call.strokeWidth = fringe;
     call.strokeThreshold = -1;
+    call.data.emplace_back(tri);
+    if (m_params.edgeAntiAlias) call.addStroke(paths, npaths);
+}
 
-    for (int i = 0; i < npaths; ++i) {
-        auto& path = paths[i];
-        if (path.nfill <= 0) continue;
-        call.data.emplace_back(QSGGeometry::DrawTriangleFan, path.fill, path.nfill);
+void NanoPainterPrivate::onRenderFillConvex(NVGpaint* paint, float fringe, const NVGpath* paths, int npaths)
+{
+    if (npaths <= 0) return;
+    auto name = m_pathName + QLatin1String("_fill");
+
+    if (!m_deferred) {
+        beginUpdateVertexData(name, m_composite, *paint, m_fillBrush.image(), fringe, fringe, -1);
+        updateVertexDataForFill(paths, npaths);
+        if (m_params.edgeAntiAlias) updateVertexDataForStroke(paths, npaths);
+        endUpdateVertexData();
+        return;
     }
 
-    if (m_params.edgeAntiAlias) {
-        for (int i = 0; i < npaths; ++i) {
-            auto& path = paths[i];
-            if (path.nstroke <= 0) continue;
-            call.data.emplace_back(QSGGeometry::DrawTriangleStrip, path.stroke, path.nstroke);
-        }
-    }
-
-    if (call.data.empty()) {
-        m_pendingCalls.pop_back();
-    }
+    auto& call = m_pendingCalls.emplace_back();
+    call.name = name;
+    call.composite = m_composite;
+    call.paint = *paint;
+    call.image = m_fillBrush.image();
+    call.fringe = fringe;
+    call.strokeWidth = fringe;
+    call.strokeThreshold = -1;
+    call.addFill(paths, npaths);
+    if (m_params.edgeAntiAlias) call.addStroke(paths, npaths);
 }
 
 void NanoPainterPrivate::onRenderStroke(NVGpaint* paint, float fringe, float strokeWidth, const NVGpath* paths, int npaths)
@@ -468,18 +632,9 @@ void NanoPainterPrivate::onRenderStroke(NVGpaint* paint, float fringe, float str
     auto name = m_pathName + QLatin1String("_stroke");
 
     if (!m_deferred) {
-        auto mat = addMaterial(name, m_composite, *paint, m_strokeBrush.image(), fringe, strokeWidth, -1);
-        bool owned = false;
-
-        for (int i = 0; i < npaths; ++i) {
-            auto& path = paths[i];
-            if (path.nstroke <= 0) continue;
-            addGeometry(mat, owned, QSGGeometry::DrawTriangleStrip, path.stroke, path.nstroke);
-        }
-
-        if (!owned) {
-            m_freeMaterials += mat;
-        }
+        beginUpdateVertexData(name, m_composite, *paint, m_strokeBrush.image(), fringe, strokeWidth, -1);
+        updateVertexDataForStroke(paths, npaths);
+        endUpdateVertexData();
         return;
     }
 
@@ -491,27 +646,24 @@ void NanoPainterPrivate::onRenderStroke(NVGpaint* paint, float fringe, float str
     call.fringe = fringe;
     call.strokeWidth = strokeWidth;
     call.strokeThreshold = -1;
-
-    for (int i = 0; i < npaths; ++i) {
-        auto& path = paths[i];
-        if (path.nstroke <= 0) continue;
-        call.data.emplace_back(QSGGeometry::DrawTriangleStrip, path.stroke, path.nstroke);
-    }
-
-    if (call.data.empty()) {
-        m_pendingCalls.pop_back();
-    }
+    call.addStroke(paths, npaths);
 }
 
 void NanoPainterPrivate::onRenderFlush()
 {
     for (auto& call : m_pendingCalls) {
-        auto mat = addMaterial(call.name, call.composite, call.paint, call.image, call.fringe, call.strokeWidth, call.strokeThreshold);
-        bool owned = false;
+        if (call.data.empty()) continue;
+        beginUpdateVertexData(call.name, call.composite, call.paint, call.image, call.fringe, call.strokeWidth, call.strokeThreshold);
 
         for (auto& geo : call.data) {
-            addGeometry(mat, owned, geo.mode, geo.data.data(), int(geo.data.size()));
+            if (geo.mode == QSGGeometry::DrawTriangles) {
+                updateVertexData(geo.triangleSet);
+            } else {
+                updateVertexData(geo.mode, { { geo.vertexData.data(), int(geo.vertexData.size()) } });
+            }
         }
+
+        endUpdateVertexData();
     }
 
     m_pendingCalls.clear();
@@ -543,25 +695,12 @@ static void xformToMat3x4(float* m3, float* t)
 
 static void updateMaterial(QQuickWindow* window, NanoMaterial* mat, NanoMaterial::UniformBuffer& info, const NVGpaint& paint, const QImage& image)
 {
-    QSGTexture* texture = nullptr;
-    bool textureOwned = true;
-
     premultiplyColor(info.innerColor, paint.innerColor);
     premultiplyColor(info.outerColor, paint.outerColor);
     memcpy(info.extent, paint.extent, sizeof(info.extent));
 
     if (paint.image) {
-        texture = window->createTextureFromImage(image);
-
-        if (paint.dashRun) {
-            info.type = NanoMaterial::TypeDashPattern;
-            auto dashUnit = paint.dashUnit < 0 ? -paint.dashUnit * mat->strokeWidth() : paint.dashUnit;
-            info.dashOffset = paint.dashOffset * dashUnit;
-            info.dashUnit = float(paint.dashRun) * dashUnit;
-            texture->setHorizontalWrapMode(QSGTexture::Repeat);
-        } else {
-            info.type = NanoMaterial::TypeImagePattern;
-        }
+        info.type = NanoMaterial::TypeImagePattern;
     } else {
         info.radius = paint.radius;
         info.feather = paint.feather;
@@ -573,42 +712,21 @@ static void updateMaterial(QQuickWindow* window, NanoMaterial* mat, NanoMaterial
         }
     }
 
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
-    // rhi keep complaining no texture, let's make it silent
-    if (!texture && window->rendererInterface()->shaderType() == QSGRendererInterface::RhiShader) {
-        static QSGTexture* dummyTexture;
-        static QMetaObject::Connection dummyTextureConnection;
-
-        if (!dummyTexture) {
-            QImage dummy(4, 4, QImage::Format_RGBA8888_Premultiplied);
-            dummy.fill(Qt::transparent);
-            dummyTexture = window->createTextureFromImage(dummy);
-            dummyTextureConnection = QQuickWindow::connect(window, &QQuickWindow::sceneGraphInvalidated, [] {
-                QQuickWindow::disconnect(dummyTextureConnection);
-                dummyTextureConnection = {};
-                delete dummyTexture;
-                dummyTexture = nullptr;
-            });
-        }
-
-        texture = dummyTexture;
-        textureOwned = false;
-    }
-#endif
-
     float invxform[6];
     nvgTransformInverse(invxform, paint.xform);
     xformToMat3x4(info.paintMatrix, invxform);
 
-    mat->setTexture(texture, textureOwned);
+    mat->setTextureImage(window, image);
     mat->setInfo(info);
 }
 
-NanoMaterial* NanoPainterPrivate::addMaterial(const QString& name, NanoPainter::Composite composite, const NVGpaint& paint, const QImage& image, float fringe, float width, float threshold)
+void NanoPainterPrivate::beginUpdateVertexData(const QString& name, NanoPainter::Composite composite, const NVGpaint& paint, const QImage& image, float fringe, float width, float threshold)
 {
-    NanoMaterial* mat;
+    auto& mat = m_updateMaterial;
+    m_updateMaterialTaken = false;
+
     if (!m_freeMaterials.isEmpty()) {
-        mat = static_cast<NanoMaterial*>(m_freeMaterials.takeLast());
+        mat = static_cast<NanoMaterial*>(m_freeMaterials.takeFirst());
     } else {
         mat = new NanoMaterial();
     }
@@ -622,10 +740,83 @@ NanoMaterial* NanoPainterPrivate::addMaterial(const QString& name, NanoPainter::
     mat->setStrokeWidth(width);
     mat->setCompositeOperation(composite);
     updateMaterial(m_item->window(), mat, info, paint, image);
-    return mat;
 }
 
-QSGGeometryNode* NanoPainterPrivate::addGeometry(QSGMaterial* material, bool& owned, unsigned mode, const NVGvertex* vertexData, int vertexCount)
+void NanoPainterPrivate::updateVertexDataForStroke(const NVGpath* paths, int npaths)
+{
+    std::vector<std::pair<const NVGvertex*, int>> vertexData;
+    for (int i = 0; i < npaths; ++i) {
+        auto& path = paths[i];
+        if (path.nstroke <= 0) continue;
+        vertexData.emplace_back(path.stroke, path.nstroke);
+    }
+    updateVertexData(QSGGeometry::DrawTriangleStrip, vertexData);
+}
+
+void NanoPainterPrivate::updateVertexDataForFill(const NVGpath* paths, int npaths)
+{
+    std::vector<std::pair<const NVGvertex*, int>> vertexData;
+    for (int i = 0; i < npaths; ++i) {
+        auto& path = paths[i];
+        if (path.nfill <= 0) continue;
+        vertexData.emplace_back(path.fill, path.nfill);
+    }
+    updateVertexData(QSGGeometry::DrawTriangleFan, vertexData);
+}
+
+void NanoPainterPrivate::updateVertexData(const QTriangleSet& tri)
+{
+    updateVertexData(QSGGeometry::DrawTriangles, tri.vertices.size() / 2, tri.indices.size(), [&](NVGvertex* vertex, uint* index) {
+        for (int i = 0, n = tri.vertices.size() - 1; i < n; i += 2, ++vertex) {
+            vertex->x = float(tri.vertices.at(i));
+            vertex->y = float(tri.vertices.at(i + 1));
+            vertex->u = 0.5f;
+            vertex->v = 1.0f;
+        }
+
+        auto indexData = static_cast<const quint32*>(tri.indices.data());
+        for (int i = 0, n = tri.indices.size(); i < n; ++i) {
+            *index++ = *indexData++;
+        }
+    });
+}
+
+void NanoPainterPrivate::updateVertexData(unsigned mode, const std::vector<std::pair<const NVGvertex*, int>>& vertexData)
+{
+    if (vertexData.empty()) return;
+
+    int vertexCount = 0;
+    for (auto [buf, n] : vertexData) {
+        if (vertexCount > 0) vertexCount += 2;
+        vertexCount += n;
+    }
+
+    auto fan = mode == QSGGeometry::DrawTriangleFan;
+    if (fan) mode = QSGGeometry::DrawTriangleStrip;
+
+    updateVertexData(mode, vertexCount, 0, [&](NVGvertex* vertexBuf, uint*) {
+        bool first = true;
+        for (auto [buf, n] : vertexData) {
+            if (first) {
+                first = false;
+            } else {
+                *vertexBuf++ = *(vertexBuf - 1);
+                *vertexBuf++ = *buf;
+            }
+
+            if (fan) {
+                vertexBuf = copyTriangleStripFromFan(vertexBuf, buf, n);
+                continue;
+            }
+
+            for (int i = 0; i < n; ++i) {
+                *vertexBuf++ = *buf++;
+            }
+        }
+    });
+}
+
+void NanoPainterPrivate::updateVertexData(unsigned mode, int vertexCount, int indexCount, std::function<void(NVGvertex*, uint*)> loader)
 {
     if (!m_node) {
         m_node = new QSGNode();
@@ -635,58 +826,61 @@ QSGGeometryNode* NanoPainterPrivate::addGeometry(QSGMaterial* material, bool& ow
     QSGGeometry* geo;
     if (m_nextFreeNode) {
         node = m_nextFreeNode;
-        node->setMaterial(material);
+        node->setMaterial(m_updateMaterial);
         m_nextFreeNode = static_cast<QSGGeometryNode*>(node->nextSibling());
 
         geo = node->geometry();
-        geo->allocate(vertexCount);
+        geo->allocate(vertexCount, indexCount);
     } else {
-        geo = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(), vertexCount);
+        geo = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(), vertexCount, indexCount, QSGGeometry::UnsignedIntType);
         geo->setVertexDataPattern(QSGGeometry::StaticPattern);
+        geo->setIndexDataPattern(QSGGeometry::StaticPattern);
 
         node = new QSGGeometryNode();
         node->setFlags(QSGNode::OwnsGeometry | QSGNode::OwnedByParent);
         node->setGeometry(geo);
-        node->setMaterial(material);
+        node->setMaterial(m_updateMaterial);
         m_node->appendChildNode(node);
     }
 
     Q_ASSERT(geo->sizeOfVertex() == sizeof(NVGvertex));
+    geo->setDrawingMode(mode);
     geo->markVertexDataDirty();
 
-    if (mode == QSGGeometry::DrawTriangleFan) {
-        // triangle fan not supported on some backend, e.g. direct3d
-        // convert it to triangle strip
-        geo->setDrawingMode(QSGGeometry::DrawTriangleStrip);
-        auto dest = static_cast<NVGvertex*>(geo->vertexData());
-        for (int i = 0; i < vertexCount; ++i) {
-            auto pos = i / 2;
-            if (i & 1) {
-                pos = vertexCount - 1 - pos;
-            }
-            *dest++ = vertexData[pos];
-        }
-    } else {
-        geo->setDrawingMode(mode);
-        memcpy(geo->vertexData(), vertexData, size_t(vertexCount * geo->sizeOfVertex()));
+    auto vertexBuf = static_cast<NVGvertex*>(geo->vertexData());
+    uint* indexBuf = nullptr;
+
+    if (indexCount > 0) {
+        geo->markIndexDataDirty();
+        indexBuf = geo->indexDataAsUInt();
     }
 
-    node->setFlag(QSGNode::OwnsMaterial, !owned);
+    loader(vertexBuf, indexBuf);
+
+    node->setFlag(QSGNode::OwnsMaterial, !m_updateMaterialTaken);
     node->markDirty(QSGNode::DirtyGeometry | QSGNode::DirtyMaterial);
-    owned = true;
-    return node;
+    m_updateMaterialTaken = true;
+}
+
+void NanoPainterPrivate::endUpdateVertexData()
+{
+    if (!m_updateMaterialTaken) {
+        m_freeMaterials += m_updateMaterial;
+    }
+    m_updateMaterial = nullptr;
+    m_updateMaterialTaken = false;
 }
 
 //---------------------------------------------------------------------------
 
-NanoPainter::NanoPainter(QQuickItem* item)
-    : d(new NanoPainterPrivate(item, nullptr, true))
+NanoPainter::NanoPainter(QQuickItem* item, float pixelScale)
+    : d(new NanoPainterPrivate(item, nullptr, pixelScale, true))
 {
     // do nothing
 }
 
-NanoPainter::NanoPainter(QQuickItem* item, QSGNode* oldNode)
-    : d(new NanoPainterPrivate(item, oldNode, false))
+NanoPainter::NanoPainter(QQuickItem* item, QSGNode* oldNode, float pixelScale)
+    : d(new NanoPainterPrivate(item, oldNode, pixelScale, false))
 {
     // do nothing
 }
@@ -694,6 +888,11 @@ NanoPainter::NanoPainter(QQuickItem* item, QSGNode* oldNode)
 NanoPainter::~NanoPainter()
 {
     delete d;
+}
+
+float NanoPainter::itemPixelRatio() const
+{
+    return d->itemPixelRatio();
 }
 
 void NanoPainter::reset()
@@ -851,6 +1050,27 @@ void NanoPainter::setJoinStyle(Qt::PenJoinStyle style)
     }
 }
 
+qreal NanoPainter::dashOffset() const
+{
+    return d->m_dashOffset;
+}
+
+void NanoPainter::setDashOffset(qreal offset)
+{
+    d->m_dashOffset = offset;
+}
+
+QVector<qreal> NanoPainter::dashPattern() const
+{
+    return d->m_dashArray;
+}
+
+void NanoPainter::setDashPattern(const QVector<qreal>& pattern)
+{
+    d->m_dashArray = pattern;
+    d->m_dashArrayDirty = true;
+}
+
 qreal NanoPainter::strokeWidth() const
 {
     return d->m_strokeWidth;
@@ -859,6 +1079,7 @@ qreal NanoPainter::strokeWidth() const
 void NanoPainter::setStrokeWidth(qreal width)
 {
     d->m_strokeWidth = width;
+    d->m_dashArrayDirty = true;
     nvgStrokeWidth(d->m_nvg, float(width));
 }
 
@@ -939,7 +1160,7 @@ void NanoPainter::arcTo(const QPointF& c1, const QPointF& c2, qreal radius)
     nvgArcTo(d->m_nvg, float(c1.x()), float(c1.y()), float(c2.x()), float(c2.y()), float(radius));
 }
 
-void NanoPainter::closePath()
+void NanoPainter::closeSubpath()
 {
     nvgClosePath(d->m_nvg);
 }
@@ -1020,7 +1241,7 @@ void NanoPainter::addPolygon(const QPolygonF& path)
     }
 
     if (path.isClosed()) {
-        closePath();
+        closeSubpath();
     } else {
         lineTo(path[n]);
     }
@@ -1042,8 +1263,23 @@ void NanoPainter::addPath(const QPainterPath& path)
     }
 }
 
+void NanoPainter::asInverted()
+{
+    nvgPathWinding(d->m_nvg, NVG_HOLE);
+}
+
 void NanoPainter::stroke()
 {
+    if (d->m_dashArrayDirty) {
+        d->m_dashArrayDirty = false;
+        d->m_dashArrayBuf.clear();
+        for (auto p : std::as_const(d->m_dashArray)) {
+            d->m_dashArrayBuf += float(p * d->m_strokeWidth);
+        }
+        nvgDashArray(d->m_nvg, d->m_dashArrayBuf.data(), d->m_dashArrayBuf.size());
+    }
+
+    nvgDashOffset(d->m_nvg, float(d->m_dashOffset * d->m_strokeWidth));
     nvgStroke(d->m_nvg);
 }
 
@@ -1055,6 +1291,17 @@ void NanoPainter::fill()
 QSGNode* NanoPainter::updatePaintNode(QSGNode* node)
 {
     return d->endUpdate(node);
+}
+
+float NanoPainter::itemPixelRatio(QQuickItem* item)
+{
+    if (!item || !item->window()) return 1;
+    auto pr = item->window()->effectiveDevicePixelRatio();
+    while (item) {
+        pr *= item->scale();
+        item = item->parentItem();
+    }
+    return qMax(0.5, pr);
 }
 
 static bool updatePaintNodeBrush(QQuickItem* item, QSGNode* root, const QString& name, const NanoBrush& brush)

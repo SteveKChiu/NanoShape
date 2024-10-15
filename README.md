@@ -16,7 +16,7 @@ And some modification has been made to NanoVG to support drawing dash line direc
 
 * Works with `QQuickItem` C++ class.
 * Works with qml directly.
-* Works with Qt 5.12 (opengl), Qt 5.15 (opengl or RHI) or Qt 6 (RHI)
+* Works with Qt 5.x (opengl) or Qt 6 (RHI)
 * Works with RHI, so it runs natively in opengl, vulkan, direct3d11, metal or other RHI backend.
 * Path-based drawing of various shape, rectangles, circles, lines etc, filled and stroked. 
 * Brush can be color, gradient, image pattern or dash pattern. 
@@ -24,19 +24,19 @@ And some modification has been made to NanoVG to support drawing dash line direc
 * Dash line pattern options.
 * Antialiasing can be turn on or off based on Item.antialiasing property.
 
-## Setup
+## Setup for qmake
 
-* Copy `nanoshape` sub directory into your project. 
+* Copy `nanoshape` sub directory into your project. (e.g. `ext/nanoshape`)
 
 * The `nanoshape.pro` is static lib that you can build and link with your code, 
   you should have a subdirs `project.pro` in your project like the following:
 
-````
+```
 TEMPLATE = subdirs
 CONFIG += ordered
 SUBDIRS += ext/nanoshape/nanoshape.pro
 SUBDIRS += app.pro
-````
+```
 
 * Then in your `app.pro`, include the `nanoshape.pri` file, path need to match your project structure.
 
@@ -44,13 +44,22 @@ SUBDIRS += app.pro
 include(ext/nanoshape/nanoshape.pri)
 ```
 
+## Setup for cmake
+
+* Copy `nanoshape` sub directory into your project. (e.g. `ext/nanoshape`)
+
+* using `add_subdirectory(ext/nanoshape)` in your top level CMakeLists.txt
+
+* using `target_link_libraries` to add `nanoshape` to your project
+
 ## Use NanoShape in QML
 
 For convenience, the `NanoShape` class is provided to be used in qml directly.
 Since this lib is hybrid qml/c++ lib and not a qml module, you have to register the `NanoShape` class before
 you can use it in qml:
 
-````c++
+```c++
+// the old Qt5 qml registration, in your cpp file
 #include "NanoShape.h"
 
 void registerQmlTypes()
@@ -59,11 +68,36 @@ void registerQmlTypes()
     qmlRegisterType<NanoShape>("NanoShape", 1, 0, "NanoShape");
     qmlRegisterUncreatableType<NanoShapePainter>("NanoShape", 1, 0, "NanoShapePainter", "inner class of NanoShape");
 }
-````
+```
+
+In Qt6 with cmake, it would be better to import as foreign types.
+
+```c++
+// the new Qt6 qml registration, in file NanoShapeForeignTypes.h
+#pragma once
+
+#include "NanoShape.h"
+
+class Import_NanoShape
+{
+    Q_GADGET
+    QML_NAMED_ELEMENT(NanoShape)
+    QML_FOREIGN(NanoShape)
+};
+
+class Import_NanoShapePainter
+{
+    Q_GADGET
+    QML_NAMED_ELEMENT(NanoShapePainter)
+    QML_FOREIGN(NanoShapePainter)
+    QML_UNCREATABLE("internal class")
+};
+
+```
 
 Once it is done you can start using it in qml:
 
-````
+```
 import NanoShape 1.0
 
 NanoShape {
@@ -77,15 +111,16 @@ NanoShape {
     onStrokeColorChanged: _shape.markDirty()
     onStrokeWidthChanged: _shape.markDirty()
 
-    onPaint: {
+    onPaint: (painter) => {
         painter.moveTo(10, 10)
         painter.bezierTo(100, 200, 100, 300, _shape.width, _shape.height)
         painter.setStrokeWidth(_shape.strokeWidth)
-        painter.setStrokeStyle(painter.dashPattern(_shape.strokeColor, [4, 1, 1, 1]))
+        painter.setDashPattern([4, 1, 1, 1])
+        painter.setStrokeStyle(_shape.strokeColor)
         painter.stroke()
     }
 }
-````
+```
 
 Unlike the Canvas item, NanoShape does not require frame buffer object and is completely hardware accelerated.
 
@@ -94,7 +129,7 @@ Unlike the Canvas item, NanoShape does not require frame buffer object and is co
 For even better performance, you may want to write your own QQuickItem class.
 The `NanoPainter` make it very easy to write the `updatePaintNode` method:
 
-````c++
+```c++
 #include "NanoPainter.h"
 
 MyItem::MyItem(QQuickItem* parent)
@@ -111,12 +146,13 @@ QSGNode* MyItem::updatePaintNode(QSGNode* node, QQuickItem::UpdatePaintNodeData*
     painter.moveTo(10, 10);
     painter.bezierTo(100, 200, 100, 300, width(), height());
     painter.setStrokeWidth(m_strokeWidth);
-    painter.setStrokeStyle(NanoBrush::dashPattern(m_strokeColor, {4.0, 1.0, 1.0, 1.0}));
+    painter.setDashPattern({4.0, 1.0, 1.0, 1.0});
+    painter.setStrokeBrush(m_strokeColor);
     painter.stroke();
     return painter.updatePaintNode();
 }
 
-````
+```
 
 ## Advanced usage in C++
 
@@ -126,7 +162,7 @@ the material without constructing the whole QSGNode again.
 
 In the last example, what if we want to change the color only, is there a better way?
 
-````c++
+```c++
 QSGNode* MyItem::updatePaintNode(QSGNode* node, QQuickItem::UpdatePaintNodeData*)
 {
     // Fast path to update the brush only.
@@ -143,16 +179,18 @@ QSGNode* MyItem::updatePaintNode(QSGNode* node, QQuickItem::UpdatePaintNodeData*
     painter.moveTo(10, 10);
     painter.bezierTo(100, 200, 100, 300, width(), height());
     painter.setStrokeWidth(m_strokeWidth);
-    painter.setStrokeStyle(NanoBrush::dashPattern(m_strokeColor, {4.0, 1.0, 1.0, 1.0}));
+    painter.setDashPattern({4.0, 1.0, 1.0, 1.0});
+    painter.setStrokeBrush(m_strokeColor);
     painter.stroke();
     return painter.updatePaintNode();
 }
 
-````
+```
 
 Please see `NanoShapeExample.cpp` for more completed example.
 
 ## Links
 
-* [Qt](http://www.qt.io)
-* [NanoVG](http://github.com/memononen/nanovg)
+* [Qt](https://www.qt.io)
+* [NanoVG](https://github.com/memononen/nanovg)
+* [NanoShape](https://github.com/SteveKChiu/NanoShape)

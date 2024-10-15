@@ -1,17 +1,31 @@
-//*
-//* https://github.com/SteveKChiu/nanoshape
-//*
-//* Copyright 2020, Steve K. Chiu <steve.k.chiu@gmail.com>
-//*
-//* This Source Code Form is subject to the terms of the Mozilla Public
-//* License, v. 2.0. If a copy of the MPL was not distributed with this
-//* file, You can obtain one at https://mozilla.org/MPL/2.0/.
-//*
+//
+// https://github.com/SteveKChiu/nanoshape
+//
+// Copyright 2024, Steve K. Chiu <steve.k.chiu@gmail.com>
+//
+// The MIT License (http://www.opensource.org/licenses/mit-license.php)
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+//
 
 #include "NanoBrush.h"
 #include "nanovg.h"
-
-static constexpr int DASH_PATTERN_DIVS = 8;
 
 //---------------------------------------------------------------------------
 
@@ -95,51 +109,6 @@ NanoBrush NanoBrush::imagePattern(const QImage& image, const QRectF& rect, qreal
 
     NanoBrush brush(nvgImagePattern(nullptr, float(part.x()), float(part.y()), float(part.width()), float(part.height()),
             nvgDegToRad(float(rotation)), 1, float(opacity)));
-    brush.m_image = image;
-    return brush;
-}
-
-NanoBrush NanoBrush::dashPattern(const QColor& color, const QVector<qreal>& patternRef, qreal offset, qreal unitWidth)
-{
-    if (patternRef.isEmpty()) {
-        return color;
-    }
-
-    auto pattern = patternRef;
-    if (pattern.count() & 1) {
-        pattern += patternRef;
-    }
-
-    int x = 0;
-    for (auto v : qAsConst(pattern)) {
-        x += qRound(v * DASH_PATTERN_DIVS);
-    }
-
-    QImage image(x, 1, QImage::Format_RGBA8888_Premultiplied);
-
-    x = 0;
-    QRgb on = qRgba(0xff, 0xff, 0xff, 0xff);
-    QRgb off = 0;
-    auto rgb = on;
-    for (auto v : qAsConst(pattern)) {
-        auto len = qRound(v * DASH_PATTERN_DIVS);
-        for (int i = 0; i < len; ++i) {
-            image.setPixel(x++, 0, rgb);
-        }
-        rgb = rgb == on ? off : on;
-    }
-
-    NVGpaint p;
-    memset(&p, 0, sizeof(p));
-
-    nvgTransformIdentity(p.xform);
-    p.image = 2;
-    p.innerColor = p.outerColor = toNVGcolor(color);
-    p.dashRun = x;
-    p.dashOffset = float(offset * DASH_PATTERN_DIVS);
-    p.dashUnit = float(unitWidth / DASH_PATTERN_DIVS);
-
-    NanoBrush brush(p);
     brush.m_image = image;
     return brush;
 }

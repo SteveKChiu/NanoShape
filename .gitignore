@@ -31,3 +31,5 @@
 *.out
 *.app
 *.pro.user*
+/build/
+*.user

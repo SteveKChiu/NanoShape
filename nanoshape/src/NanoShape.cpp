@@ -1,12 +1,28 @@
-//*
-//* https://github.com/SteveKChiu/nanoshape
-//*
-//* Copyright 2020, Steve K. Chiu <steve.k.chiu@gmail.com>
-//*
-//* This Source Code Form is subject to the terms of the Mozilla Public
-//* License, v. 2.0. If a copy of the MPL was not distributed with this
-//* file, You can obtain one at https://mozilla.org/MPL/2.0/.
-//*
+//
+// https://github.com/SteveKChiu/nanoshape
+//
+// Copyright 2024, Steve K. Chiu <steve.k.chiu@gmail.com>
+//
+// The MIT License (http://www.opensource.org/licenses/mit-license.php)
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+//
 
 #include "NanoShape.h"
 
@@ -116,6 +132,16 @@ void NanoShapePainter::setStrokeWidth(qreal width)
     NanoPainter::setStrokeWidth(width);
 }
 
+void NanoShapePainter::setDashOffset(qreal offset)
+{
+    NanoPainter::setDashOffset(offset);
+}
+
+void NanoShapePainter::setDashPattern(const QVector<qreal>& pattern)
+{
+    NanoPainter::setDashPattern(pattern);
+}
+
 void NanoShapePainter::setMiterLimit(qreal limit)
 {
     NanoPainter::setMiterLimit(limit);
@@ -187,12 +213,6 @@ QVariant NanoShapePainter::imagePattern(const QUrl& imageUrl, const QRectF& part
     return QVariant::fromValue(NanoBrush::imagePattern(image, part, rotation, opacity));
 }
 
-QVariant NanoShapePainter::dashPattern(const QColor& color, const QVector<qreal>& pattern,
-        qreal offset, qreal unitWidth)
-{
-    return QVariant::fromValue(NanoBrush::dashPattern(color, pattern, offset, unitWidth));
-}
-
 void NanoShapePainter::beginPath()
 {
     NanoPainter::beginPath();
@@ -223,9 +243,9 @@ void NanoShapePainter::arcTo(float c1x, float c1y, float c2x, float c2y, float r
     NanoPainter::arcTo(c1x, c1y, c2x, c2y, radius);
 }
 
-void NanoShapePainter::closePath()
+void NanoShapePainter::closeSubpath()
 {
-    NanoPainter::closePath();
+    NanoPainter::closeSubpath();
 }
 
 void NanoShapePainter::addArc(float cx, float cy, float radius, float angle0, float angle1, bool clockwise)
@@ -266,12 +286,25 @@ void NanoShapePainter::addPolygon(const QVariant& v)
     } else if (v.canConvert<QVector<QPointF>>()) {
         poly = v.value<QVector<QPointF>>();
     } else {
-        const auto list = v.toList();
-        for (auto& item : list) {
-            poly += item.toPointF();
+        auto list = v.toList();
+        if (!list.isEmpty()) {
+            if (list.first().userType() == QMetaType::QPointF) {
+                for (auto& item : list) {
+                    poly += item.toPointF();
+                }
+            } else {
+                for (int i = 0, n = list.count() - 1; i < n; i += 2) {
+                    poly += QPointF(list.at(i).toDouble(), list.at(i + 1).toDouble());
+                }
+            }
         }
     }
     NanoPainter::addPolygon(poly);
+}
+
+void NanoShapePainter::asInverted()
+{
+    NanoPainter::asInverted();
 }
 
 void NanoShapePainter::stroke()
@@ -343,6 +376,11 @@ void NanoShape::prepare()
 
 QSGNode* NanoShape::updatePaintNode(QSGNode* node, QQuickItem::UpdatePaintNodeData*)
 {
+    if (!qFuzzyCompare(m_itemPixelRatio, m_painter.itemPixelRatio())) {
+        m_itemPixelRatio = m_painter.itemPixelRatio();
+        m_dirty = true;
+    }
+
     if (node && !m_dirty) return node;
     m_dirty = false;
     return m_painter.updatePaintNode(node);

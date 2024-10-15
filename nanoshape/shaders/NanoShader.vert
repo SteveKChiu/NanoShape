@@ -11,7 +11,7 @@ layout(location = 1) out vec2 fpos;
 
 out gl_PerVertex { vec4 gl_Position; };
 
-void main(void) {
+void main() {
     gl_Position = qt_Matrix * vertex;
     ftcoord = tcoord;
     fpos = vertex.xy;

@@ -1,12 +1,28 @@
-//*
-//* https://github.com/SteveKChiu/nanoshape
-//*
-//* Copyright 2020, Steve K. Chiu <steve.k.chiu@gmail.com>
-//*
-//* This Source Code Form is subject to the terms of the Mozilla Public
-//* License, v. 2.0. If a copy of the MPL was not distributed with this
-//* file, You can obtain one at https://mozilla.org/MPL/2.0/.
-//*
+//
+// https://github.com/SteveKChiu/nanoshape
+//
+// Copyright 2024, Steve K. Chiu <steve.k.chiu@gmail.com>
+//
+// The MIT License (http://www.opensource.org/licenses/mit-license.php)
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+//
 
 #pragma once
 
@@ -51,17 +67,22 @@ public:
     Q_INVOKABLE void setMiterLimit(qreal limit);
     Q_INVOKABLE void setStrokeWidth(qreal width);
 
-    // accept color, gradient or pattern
+    // the dash offset and pattern will be scaled with stroke width
+    Q_INVOKABLE void setDashOffset(qreal offset);
+    Q_INVOKABLE void setDashPattern(const QVector<qreal>& pattern);
+
+    // accept color, gradient or image pattern
     Q_INVOKABLE void setStrokeStyle(const QVariant& style);
     Q_INVOKABLE void setFillStyle(const QVariant& style);
 
     Q_INVOKABLE void beginPath();
+
     Q_INVOKABLE void moveTo(float x, float y);
     Q_INVOKABLE void lineTo(float x, float y);
     Q_INVOKABLE void bezierTo(float c1x, float c1y, float c2x, float c2y, float x, float y);
     Q_INVOKABLE void quadTo(float cx, float cy, float x, float y);
     Q_INVOKABLE void arcTo(float c1x, float c1y, float c2x, float c2y, float radius);
-    Q_INVOKABLE void closePath();
+    Q_INVOKABLE void closeSubpath();
 
     Q_INVOKABLE void addArc(float cx, float cy, float radius, float angle0, float angle1, bool clockwise = true);
     Q_INVOKABLE void addRect(float x, float y, float width, float height);
@@ -70,8 +91,13 @@ public:
     Q_INVOKABLE void addEllipse(float centerX, float centerY, float radiusX, float radiusY);
     Q_INVOKABLE void addCircle(float centerX, float centerY, float radius);
 
-    // accept qml Qt.point array or the QPolygonF
+    // accept the following type:
+    // QPolygonF, QVector<QPointF>, qml array of Qt.point, qml array of number (in [x0, y0, x1, y1, ...] format)
     Q_INVOKABLE void addPolygon(const QVariant& polygon);
+
+    // make previous subpath as inverted (aka. hole)
+    // subpath begins with moveTo, or other addXXX methods
+    Q_INVOKABLE void asInverted();
 
     Q_INVOKABLE void stroke();
     Q_INVOKABLE void fill();
@@ -87,9 +113,6 @@ public:
 
     Q_INVOKABLE static QVariant imagePattern(const QUrl& imageUrl,
             const QRectF& part = {}, qreal rotation = 0, qreal opacity = 1);
-
-    Q_INVOKABLE static QVariant dashPattern(const QColor& color, const QVector<qreal>& pattern,
-            qreal offset = 0, qreal unitWidth = -1);
 };
 
 QML_DECLARE_TYPE(NanoShapePainter)
@@ -141,6 +164,7 @@ private:
 
 private:
     NanoShapePainter m_painter;
+    float m_itemPixelRatio = 1;
     bool m_dirty = true;
 };
 
